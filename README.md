@@ -1,6 +1,6 @@
 # CV Analyzer
 
-A desktop tool for analyzing **cyclic voltammetry (CV)** data from BioLogic EC-Lab (`.mpt`) files: browse files and cycles, find redox peaks, integrate charge, correct for the OER background, and export per-cycle metrics to CSV in a few clicks.
+Turns **thousands of cyclic voltammetry (CV) cycles** from BioLogic EC-Lab (`.mpt`) files into one consistent, per-cycle dataset: peak potentials and currents, charge, OER-corrected values, onsets, and currents at fixed potentials. That dataset feeds the next stage, where parameters are compared across samples, anions and cycle number.
 
 ![CV Analyzer main window](docs/screenshot_main.png)
 
@@ -8,9 +8,11 @@ A desktop tool for analyzing **cyclic voltammetry (CV)** data from BioLogic EC-L
 
 An electrocatalysis experiment produces many `.mpt` files, each with dozens to hundreds of CV cycles. Extracting the same numbers from every cycle (peak potentials and currents, charge, currents at fixed potentials, onset potentials) by hand in Excel or EC-Lab is slow, hard to keep consistent between people, and easy to get wrong.
 
+Some features are also hard to reduce to a single number. An onset potential, for example, depends on how it is defined. For these, a visual side-by-side comparison of the curves is more honest than a column in a table.
+
 ## What it does
 
-CV Analyzer turns that into a repeatable workflow:
+CV Analyzer turns that into a repeatable workflow, the first stage of a pipeline from raw instrument files to comparison:
 
 **Open a folder → tick cycles → Run Analysis → Export CSV**
 
@@ -23,7 +25,7 @@ CV Analyzer turns that into a repeatable workflow:
 - **Currents at fixed potentials**: forward, backward and forward-minus-backward currents at set potentials.
 - **Analysis report**: statistics for every parameter (n, missing values, mean, std, variance), with missing values flagged.
 - **Batch processing**: *Find unanalyzed…* steps through every file without an export yet.
-- **Overlay window**: compares the same cycle across many files, matched by name (for example by anion and measurement type), on a common Y axis.
+- **Overlay window**: plots the same cycle from many files on a common Y axis, matched by name (for example by anion and measurement type). It is built for features that resist a fixed definition, such as onsets, where comparing the curves themselves tells more than a number.
 - **Appendix page builder**: arranges graphs on a printable page and saves it as PNG or PDF.
 - **Guided tutorial (English / Hebrew)**: runs on first launch on synthetic sample files, and every step waits until the user has actually done it.
 
