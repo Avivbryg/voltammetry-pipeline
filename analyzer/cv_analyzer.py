@@ -9,7 +9,7 @@ for comparing the same cycle across many files, a printable appendix-page
 builder, and a guided first-run tutorial (English / Hebrew) on synthetic data.
 
 Author: Aviv Bryger
-Run:    python cv_analyzer.py
+Run:    python analyzer/cv_analyzer.py
 """
 
 import tkinter as tk
