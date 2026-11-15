@@ -5890,6 +5890,7 @@ class CVApp:
             return str(v)
     
         cols = self.analysis_tree['columns']
+        t_start = time.perf_counter()
     
         for (p, cyc) in pairs:
             E_rhe, t_sel, Y_raw, Y_corr, mask_corr, I_for_peaks, I_sel, dbg, is_ocv = self.get_display_series(p, cyc, pH)
@@ -6075,6 +6076,9 @@ class CVApp:
             self.analysis_tree.insert('', 'end', values=vals)
 
         # Statistics report
+        # Wall time of the analysis itself (reading + metrics + table),
+        # shown in the report header.
+        self._last_analysis_seconds = time.perf_counter() - t_start
         self._build_analysis_report()
 
         # Second heads-up now the run is done and Export is the next step.
@@ -6544,6 +6548,10 @@ class CVApp:
         # ======================= 1. header =======================
         T.insert('end', "=" * W + "\n")
         T.insert('end', f"ANALYSIS REPORT   -   {n_rows} cycle(s)   |   {len(files)} file(s)\n", 'bold')
+        secs = getattr(self, '_last_analysis_seconds', None)
+        if secs is not None:
+            per = 1000.0 * secs / n_rows if n_rows else 0.0
+            T.insert('end', f"Analysis time: {secs:.1f} s  ({per:.0f} ms per cycle)\n")
         T.insert('end', "=" * W + "\n\n")
 
         for f in files:
