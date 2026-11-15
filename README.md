@@ -9,7 +9,7 @@ An electrochemistry experiment can produce thousands of CV cycles. This pipeline
 | 1. Extract | **CV Analyzer** (`analyzer/`) | Reads EC-Lab `.mpt` files, or `.mpr` files converted with [MPR Converter](https://mpr-converter.vercel.app), and turns every cycle into one row of metrics: peaks, charge, OER-corrected values, onsets, fixed-potential currents. Exports CSV. |
 | 2. Compare | **CV Explorer** | Plots the exported parameters against cycle number and other scales, for several anions side by side. Being prepared for release. |
 
-![CV Analyzer main window](docs/screenshot_main.png)
+![CV Analyzer main window: 900 synthetic cycles from three files, analyzed in about 10 s](docs/screenshot_main.png)
 
 ## Stage 1: CV Analyzer
 
