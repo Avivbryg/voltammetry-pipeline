@@ -76,6 +76,15 @@ Then open `sample_data/demo_large/` in CV Analyzer. These files are also synthet
 
 File names follow the scheme `<measurement>_<station>_<electrode>_<anion>_<…>.mpt`. The export dialog and the overlay window read these parts from the name; any other name still works for analysis.
 
+### Naming settings
+
+The names in that scheme differ from lab to lab, so they are set in the program, under **File → Naming settings…**:
+
+- **Measurement types**, one per line as `code | name | wording in graph titles`, for example `act | ACT-night | activation, no additive`. The code is what appears in file names.
+- **Stations**, **anions** and **laborants**, one per line.
+
+The lists are saved in `~/.cv_overlay_settings.json`. The defaults (`ACT-night`, `STB-day`, stations A–D, and the laborants Maya R., Tom K. and Noa S.) are invented examples that match the synthetic sample files.
+
 ### Output
 
 **Export Analysis CSV** writes one row per cycle with all computed metrics: raw and OER-corrected peak values, charges, onsets, and fixed-potential currents. The default export folder is `~/CV_Analyzer_exports`. Both the data folder and the export folder can be changed under **File → Set default folders…**, and the choice is remembered in `~/.cv_overlay_settings.json`.

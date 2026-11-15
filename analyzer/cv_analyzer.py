@@ -40,12 +40,83 @@ except Exception:
     HAS_SAVGOL = False
 
 # -------- Default folder path --------
-# ---- Export dialog option lists ----
-ANIONS = ['Iodide', 'Chloride', 'Bromide', 'Carbonate', 'Acetate',
-          'Cyanate', 'Hydroxide', 'Nitrate', 'Nitrite', 'Sulphate']
-STATIONS = ['A', 'B', 'C', 'D']
-MEAS_TYPES = ['UAL-ACT-night', 'UOS-night']
-LABORANTS = ['User']   # starting list; edited in the export window ("Edit list...")
+# ---- Naming scheme: default lists ----
+# File names follow <measurement>_<station>_<electrode>_<anion>_<...>, and the
+# export dialog offers these lists. They differ from lab to lab, so every list
+# can be changed in the program (File > Naming settings...) and the choice is
+# saved in ~/.cv_overlay_settings.json under "naming". The defaults below are
+# invented examples that match the synthetic sample files.
+DEFAULT_ANIONS = ['Iodide', 'Chloride', 'Bromide', 'Carbonate', 'Acetate',
+                  'Cyanate', 'Hydroxide', 'Nitrate', 'Nitrite', 'Sulphate']
+DEFAULT_STATIONS = ['A', 'B', 'C', 'D']
+# (code in the file name, full measurement name, wording for graph titles)
+DEFAULT_MEAS = [
+    ('act', 'ACT-night', 'activation, no additive'),
+    ('stb', 'STB-day', 'stability, with additive'),
+]
+LABORANTS = ['Maya R.', 'Tom K.', 'Noa S.']   # starting list; edited in the program
+
+
+def _naming():
+    n = overlay_load_settings().get('naming')
+    return n if isinstance(n, dict) else {}
+
+
+def _clean_list(v, default):
+    if isinstance(v, list):
+        out = [str(x).strip() for x in v if str(x).strip()]
+        if out:
+            return out
+    return list(default)
+
+
+def get_anions():
+    return _clean_list(_naming().get('anions'), DEFAULT_ANIONS)
+
+
+def get_stations():
+    return _clean_list(_naming().get('stations'), DEFAULT_STATIONS)
+
+
+def get_meas():
+    """[(code, name, description), ...] for the measurement types."""
+    v = _naming().get('meas')
+    out = []
+    if isinstance(v, list):
+        for row in v:
+            if isinstance(row, (list, tuple)) and len(row) >= 2 and str(row[1]).strip():
+                code = str(row[0]).strip()
+                name = str(row[1]).strip()
+                desc = str(row[2]).strip() if len(row) > 2 else ''
+                out.append((code, name, desc))
+    return out or list(DEFAULT_MEAS)
+
+
+def get_meas_types():
+    return [name for _c, name, _d in get_meas()]
+
+
+def get_meas_prefix():
+    """Short code in the file name (lower case) -> measurement name."""
+    return {c.lower(): name for c, name, _d in get_meas() if c}
+
+
+def get_meas_descriptions():
+    """Measurement name -> wording used in graph titles."""
+    return {name: (d or name) for _c, name, d in get_meas()}
+
+
+def save_naming(anions, stations, meas):
+    st = overlay_load_settings()
+    st['naming'] = {'anions': list(anions), 'stations': list(stations),
+                    'meas': [list(m) for m in meas]}
+    overlay_save_settings(st)
+
+
+def reset_naming():
+    st = overlay_load_settings()
+    st.pop('naming', None)
+    overlay_save_settings(st)
 
 
 def get_laborants():
@@ -93,16 +164,15 @@ ANION_ALIASES = {
     'ac': 'Acetate', 'oac': 'Acetate', 'ocn': 'Cyanate', 'cno': 'Cyanate',
 }
 
-# Short measurement codes as they appear in file names.
-MEAS_PREFIX = {'ual': 'UAL-ACT-night', 'uos': 'UOS-night'}
 
 
 def guess_name_parts(mpt_name):
     """Best-effort read of the export name parts out of a .mpt file name.
 
-    Example:  UAL_A_35710_nitrite_9_6.mpt
+    Example:  ACT_A_35710_nitrite_9_6.mpt
           ->  anion=Nitrite, station=A, electrode=35710,
-              meas=UAL-ACT-night, laborant=<default>
+              meas=ACT-night, laborant=<default>
+    (with the default naming lists; see File > Naming settings...)
 
     Every value is only a suggestion: it is pre-filled into the export
     dialog for the user to confirm or correct, never saved automatically.
@@ -118,7 +188,7 @@ def guess_name_parts(mpt_name):
     lowtok = [t.lower() for t in tokens]
 
     # --- Anion: full word anywhere, else a shorthand token ---
-    for a in ANIONS:
+    for a in get_anions():
         if a.lower() in low:
             out['anion'] = a
             break
@@ -128,25 +198,27 @@ def guess_name_parts(mpt_name):
                 out['anion'] = ANION_ALIASES[t]
                 break
 
-    # --- Station: a standalone single letter A-D ---
+    # --- Station: a token equal to one of the station names ---
+    stations = {x.upper(): x for x in get_stations()}
     for t in tokens:
-        if len(t) == 1 and t.upper() in STATIONS:
-            out['station'] = t.upper()
+        if t.upper() in stations:
+            out['station'] = stations[t.upper()]
             break
 
     # --- Measurement type: full name first, then the short code ---
-    for m in MEAS_TYPES:
+    prefix = get_meas_prefix()
+    for m in get_meas_types():
         if m.lower() in low:
             out['meas'] = m
             break
     if not out['meas']:
         for t in lowtok:
-            if t in MEAS_PREFIX:
-                out['meas'] = MEAS_PREFIX[t]
+            if t in prefix:
+                out['meas'] = prefix[t]
                 break
     if not out['meas']:
-        # e.g. "UAL-ACT-day..." where the token split keeps 'ual' attached
-        for code, full in MEAS_PREFIX.items():
+        # e.g. "ACT-day..." where the token split keeps the code attached
+        for code, full in prefix.items():
             if low.startswith(code):
                 out['meas'] = full
                 break
@@ -715,6 +787,103 @@ def compute_fixedE_metrics(E_seq, I_seq, targets, junction_range):
     out.update(find_junction_in_range(E_seq, I_seq, junction_range=junction_range))
     return out
 
+# =================== Naming settings (File > Naming settings...) ===================
+class NamingSettingsDialog(tk.Toplevel):
+    """Edit the lab-specific lists of the naming scheme: measurement types
+    (with their short code in file names and the wording for graph titles),
+    stations, anions and laborants. Saved in the settings file on Save."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("Naming settings")
+        self.saved = False
+
+        tk.Label(self, text="File names are read as  <measurement>_<station>_<electrode>_<anion>_...\n"
+                            "Set the names your lab uses. One item per line.",
+                 justify='left', fg='#555').pack(anchor='w', padx=10, pady=(10, 4))
+
+        grid = tk.Frame(self)
+        grid.pack(fill='both', expand=True, padx=10)
+
+        self.meas_txt = self._box(grid, 0, 0, "Measurement types\n"
+                                  "code | name | wording in graph titles",
+                                  ["{} | {} | {}".format(*m) for m in get_meas()], width=52, colspan=2)
+        self.station_txt = self._box(grid, 2, 0, "Stations", get_stations(), width=24)
+        self.lab_txt = self._box(grid, 2, 1, "Laborants", get_laborants(), width=24)
+        self.anion_txt = self._box(grid, 4, 0, "Anions", get_anions(), width=52, colspan=2, height=6)
+
+        tk.Label(self, text="Example line:  act | ACT-night | activation, no additive\n"
+                            "A file named ACT_A_123_Nitrate.mpt is then read as measurement ACT-night, "
+                            "station A,\nelectrode 123, anion Nitrate. Changing a list does not rename "
+                            "any file or export.",
+                 justify='left', fg='#777', font=('TkDefaultFont', 8)).pack(anchor='w', padx=10, pady=(6, 0))
+
+        btns = tk.Frame(self)
+        btns.pack(fill='x', padx=10, pady=10)
+        tk.Button(btns, text="Reset to defaults", command=self._reset).pack(side='left')
+        tk.Button(btns, text="Cancel", width=10, command=self.destroy).pack(side='right')
+        tk.Button(btns, text="Save", width=10, command=self._save).pack(side='right', padx=(0, 6))
+
+        self.transient(parent)
+        self.grab_set()
+        parent.wait_window(self)
+
+    @staticmethod
+    def _box(parent, row, col, label, lines, width=24, height=5, colspan=1):
+        tk.Label(parent, text=label, font=('TkDefaultFont', 9, 'bold'),
+                 justify='left').grid(row=row, column=col, columnspan=colspan, sticky='w', pady=(6, 2))
+        txt = tk.Text(parent, width=width, height=height, wrap='none', undo=True)
+        txt.grid(row=row + 1, column=col, columnspan=colspan, sticky='we', padx=(0, 6))
+        txt.insert('1.0', "\n".join(lines))
+        return txt
+
+    @staticmethod
+    def _lines(txt):
+        out = []
+        for line in txt.get('1.0', 'end').splitlines():
+            line = line.strip()
+            if line and line.lower() not in [x.lower() for x in out]:
+                out.append(line)
+        return out
+
+    def _save(self):
+        meas = []
+        bad = []
+        for line in self._lines(self.meas_txt):
+            parts = [p.strip() for p in line.split('|')]
+            if len(parts) < 2 or not parts[1]:
+                bad.append(line)
+                continue
+            meas.append((parts[0], parts[1], parts[2] if len(parts) > 2 else ''))
+        if bad:
+            messagebox.showwarning("Naming settings",
+                                   "Each measurement line needs at least  code | name\n\n"
+                                   "Not understood:\n  " + "\n  ".join(bad), parent=self)
+            return
+        anions, stations = self._lines(self.anion_txt), self._lines(self.station_txt)
+        if not (meas and anions and stations):
+            messagebox.showwarning("Naming settings",
+                                   "Measurement types, stations and anions each need at least one item.",
+                                   parent=self)
+            return
+        save_naming(anions, stations, meas)
+        save_laborants(self._lines(self.lab_txt))
+        self.saved = True
+        self.destroy()
+
+    def _reset(self):
+        if not messagebox.askyesno("Naming settings",
+                                   "Restore the default lists for measurement types, stations "
+                                   "and anions?\n\nThe laborant list is kept.", parent=self):
+            return
+        reset_naming()
+        for txt, lines in ((self.meas_txt, ["{} | {} | {}".format(*m) for m in DEFAULT_MEAS]),
+                           (self.station_txt, DEFAULT_STATIONS),
+                           (self.anion_txt, DEFAULT_ANIONS)):
+            txt.delete('1.0', 'end')
+            txt.insert('1.0', "\n".join(lines))
+
+
 # =================== Laborant list editor ===================
 class LaborantListDialog(tk.Toplevel):
     """Add / remove the names offered in the Laborant field. Saved on Close."""
@@ -846,7 +1015,7 @@ class ExportNameDialog(tk.Toplevel):
         tk.Label(body, text="Anion:").grid(row=0, column=0, sticky='w', pady=4)
         self.anion_var = tk.StringVar(value=g['anion'])
         self.anion_cb = ttk.Combobox(body, textvariable=self.anion_var,
-                                     values=ANIONS, width=28)
+                                     values=get_anions(), width=28)
         self.anion_cb.grid(row=0, column=1, sticky='w', pady=4)
         self.anion_cb.bind('<KeyRelease>', self._anion_autocomplete)
         self.anion_cb.focus_set()
@@ -856,7 +1025,7 @@ class ExportNameDialog(tk.Toplevel):
         self.station_var = tk.StringVar(value=g['station'])
         st = tk.Frame(body)
         st.grid(row=1, column=1, sticky='w', pady=4)
-        for v in STATIONS:
+        for v in get_stations():
             tk.Radiobutton(st, text=v, value=v, variable=self.station_var).pack(side='left')
 
         # ---- Electrode: free text ----
@@ -869,7 +1038,7 @@ class ExportNameDialog(tk.Toplevel):
         mt = tk.Frame(body)
         mt.grid(row=3, column=1, sticky='w', pady=4)
         self.meas_var = tk.StringVar(value=g['meas'])
-        for v in MEAS_TYPES:
+        for v in get_meas_types():
             tk.Radiobutton(mt, text=v, value=v, variable=self.meas_var).pack(anchor='w')
 
         # ---- Laborant: pick from the saved list, or type a new name ----
@@ -881,8 +1050,9 @@ class ExportNameDialog(tk.Toplevel):
                                    values=get_laborants(), width=20)
         self.lab_cb.pack(side='left')
         tk.Button(lb, text="Edit list...", command=self._edit_laborants).pack(side='left', padx=(6, 0))
-        tk.Label(body, text="A new name typed here is added to the list when you save.",
-                 fg='#777', font=('TkDefaultFont', 8)).grid(row=5, column=1, sticky='w')
+        tk.Label(body, text="A new name typed here is added to the list when you save.\n"
+                            "Anions, stations and measurement types: File > Naming settings...",
+                 fg='#777', font=('TkDefaultFont', 8), justify='left').grid(row=5, column=1, sticky='w')
 
         # ---- live preview of the resulting name ----
         ttk.Separator(self, orient='horizontal').pack(fill='x', padx=10, pady=(6, 2))
@@ -956,7 +1126,7 @@ class ExportNameDialog(tk.Toplevel):
         typed = self.anion_var.get()
         if not typed:
             return
-        for opt in ANIONS:
+        for opt in get_anions():
             if opt.lower().startswith(typed.lower()) and opt.lower() != typed.lower():
                 self.anion_cb.delete(0, 'end')
                 self.anion_cb.insert(0, opt)
@@ -1046,11 +1216,8 @@ APPENDIX_PAGE_SIZES_CM = {
 }
 APPENDIX_HEADING_CM = 1.2  # height reserved for the optional page heading
 
-# Measurement type (as in the file name) -> wording used in graph titles.
-MEAS_DESCRIPTIONS = {
-    'UAL-ACT-night': 'activation without urea',
-    'UOS-night': 'activation with urea',
-}
+# Measurement type -> wording used in graph titles: get_meas_descriptions(),
+# set in File > Naming settings...
 
 
 def _ap_wrap_title(text, width_in, fontsize):
@@ -1746,7 +1913,7 @@ class OverlayWindow(tk.Toplevel):
                  font=('TkDefaultFont', 9, 'bold')).pack(anchor='w', padx=6, pady=(8, 0))
         self.meas_var = tk.StringVar(value='')
         avail_meas = sorted({m['meas'] for _n, _p, m in self.candidates if m['meas']})
-        for mt in (avail_meas or MEAS_TYPES):
+        for mt in (avail_meas or get_meas_types()):
             n = sum(1 for _n, _p, m in self.candidates if m['meas'] == mt)
             tk.Radiobutton(sel_tab, text=f"{mt}  ({n})", value=mt,
                            variable=self.meas_var).pack(anchor='w', padx=12)
@@ -2315,7 +2482,7 @@ class OverlayWindow(tk.Toplevel):
             if anion and anion != '?' and anion not in anions:
                 anions.append(anion)
         meas = self._plotted_meas or self.meas_var.get()
-        desc = MEAS_DESCRIPTIONS.get(meas, meas)
+        desc = get_meas_descriptions().get(meas, meas)
         return " - ".join(p for p in (", ".join(anions), desc) if p)
 
     def _update_auto_title(self):
@@ -2665,8 +2832,8 @@ TUTORIAL_EXPORT_DIR = os.path.join(TUTORIAL_DIR, 'Processed')
 # (file name, peak shift in V, peak scale) - names follow the lab naming scheme,
 # so the export dialog and the overlay window can read them.
 TUTORIAL_SAMPLES = [
-    ('UAL_A_10001_Nitrate_tutorial.mpt', 0.000, 1.00),
-    ('UAL_A_10002_Carbonate_tutorial.mpt', 0.015, 0.80),
+    ('ACT_A_10001_Nitrate_tutorial.mpt', 0.000, 1.00),
+    ('ACT_A_10002_Carbonate_tutorial.mpt', 0.015, 0.80),
 ]
 
 
@@ -2677,6 +2844,13 @@ def make_tutorial_samples(folder=TUTORIAL_DIR):
     1.42 V, a cathodic peak near 1.33 V, and an OER tail above 1.5 V.
     """
     os.makedirs(folder, exist_ok=True)
+    # Earlier versions wrote these under other names; remove those copies so
+    # the tutorial folder holds exactly the files the tour talks about.
+    for old in ('UAL_A_10001_Nitrate_tutorial.mpt', 'UAL_A_10002_Carbonate_tutorial.mpt'):
+        try:
+            os.remove(os.path.join(folder, old))
+        except OSError:
+            pass
     rng = np.random.default_rng(7)
     step, rate = 0.002, 0.010                     # V per point, V/s
     up = np.arange(1.00, 1.60 + 1e-9, step)
@@ -3475,6 +3649,7 @@ class CVApp:
         file_menu.add_command(label="Save PNG...", command=self.save_png)
         file_menu.add_separator()
         file_menu.add_command(label="Set default folders...", command=self.set_default_folders)
+        file_menu.add_command(label="Naming settings...", command=self.edit_naming)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=root.quit)
         help_menu = tk.Menu(menu, tearoff=False)
@@ -3756,6 +3931,15 @@ class CVApp:
                                "Open the .mpt folder now?"):
             self.clear_all()
             self.open_folder(path_override=mpt)
+
+    def edit_naming(self):
+        """Lab-specific lists of the naming scheme (measurement types,
+        stations, anions, laborants). Applies to dialogs opened afterwards."""
+        dlg = NamingSettingsDialog(self.root)
+        if dlg.saved:
+            messagebox.showinfo("Naming settings",
+                                "Saved. The new lists apply to export, rename and overlay "
+                                "windows opened from now on.")
 
     def _maybe_start_tutorial(self):
         if not overlay_load_settings().get('tutorial_done'):

@@ -96,7 +96,7 @@ def main():
     os.makedirs(args.out, exist_ok=True)
     rng = np.random.default_rng(args.seed)
     for k, anion in enumerate(ANIONS, start=1):
-        fname = f"UAL_A_{20000 + k}_{anion[0]}_demo.csv"
+        fname = f"ACT_{'ABC'[k - 1]}_{20000 + k}_{anion[0]}_demo.csv"
         path = os.path.join(args.out, fname)
         one_file(path, anion, args.cycles, rng)
         size = os.path.getsize(path) / 1e6
