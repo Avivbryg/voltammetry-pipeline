@@ -5,3 +5,4 @@ venv/
 *.csv
 .DS_Store
 Thumbs.db
+sample_data/demo_large/

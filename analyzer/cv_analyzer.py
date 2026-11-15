@@ -1,7 +1,8 @@
 """
 CV Analyzer - desktop tool for analyzing cyclic voltammetry (CV) data.
 
-Reads EC-Lab ASCII (.mpt) files, browses files and cycles in a tree,
+Reads EC-Lab ASCII (.mpt) files and the CSV / TXT output of MPR Converter
+(https://mpr-converter.vercel.app), browses files and cycles in a tree,
 converts potentials to RHE, finds anodic/cathodic redox peaks, integrates
 charge, optionally subtracts the OER background, computes derivatives with
 smoothing, and exports per-cycle metrics to CSV. Includes an overlay window
@@ -177,6 +178,51 @@ DEFAULT_FOLDER = ''
 EXPORT_FOLDER = os.path.join(os.path.expanduser('~'), 'CV_Analyzer_exports')
 
 # =================== Robust EC-Lab ASCII reader (CV + OCV) ===================
+# Data files the library lists: EC-Lab ASCII exports (.mpt), and the CSV / TXT
+# files MPR Converter writes from binary .mpr files. Converter output keeps the
+# original EC-Lab column names (Ewe/V, <I>/mA, cycle number, time/s), so the
+# same reader handles both.
+DATA_EXTS = ('.mpt', '.txt', '.csv')
+DATA_FILETYPES = [("CV data (.mpt, MPR Converter .csv/.txt)", "*.mpt *.csv *.txt"),
+                  ("EC-Lab ASCII", "*.mpt"),
+                  ("MPR Converter output", "*.csv *.txt")]
+
+
+def _header_delimiter(line):
+    """Column separator of a header line: tab (EC-Lab, converter .txt),
+    ';' or ',' (converter .csv)."""
+    if '\t' in line:
+        return '\t'
+    if ';' in line:
+        return ';'
+    if ',' in line:
+        return ','
+    return '\t'
+
+
+def is_cv_data_file(path):
+    """True for a .mpt, or for a .csv / .txt whose header has a potential and
+    a current column (MPR Converter output). Other CSV / TXT files in the
+    folder, including this program's own analysis exports, are left out.
+    Reads only the first lines, so listing a folder stays fast."""
+    ext = os.path.splitext(path)[1].lower()
+    if ext == '.mpt':
+        return True
+    if ext not in DATA_EXTS:
+        return False
+    try:
+        with open(path, 'r', encoding='latin1') as f:
+            for _ in range(5):
+                s = f.readline()
+                if not s:
+                    break
+                if 'Ewe' in s and ('<I>' in s or 'I/mA' in s or 'I/A' in s):
+                    return True
+    except OSError:
+        pass
+    return False
+
+
 def read_mpt(path):
     """
     Returns:
@@ -214,16 +260,33 @@ def read_mpt(path):
     if header_index is None:
         raise ValueError("Could not find data header (time/Ewe).")
 
-    raw_header = lines[header_index].strip().replace(',', '.')
-    header = [h.strip() for h in raw_header.split('\t') if h.strip() != '']
+    delim = _header_delimiter(lines[header_index])
+    if delim == '\t':
+        # EC-Lab .mpt / MPR Converter .txt. A comma here can only be a
+        # decimal comma (European locale exports).
+        raw_header = lines[header_index].strip().replace(',', '.')
+        header = [h.strip() for h in raw_header.split('\t') if h.strip() != '']
+    else:
+        # MPR Converter .csv (',') or a ';'-separated export. Cells keep
+        # their position, so an empty cell becomes NaN instead of shifting
+        # the columns after it.
+        header = [h.strip().strip('"') for h in lines[header_index].strip().split(delim)]
 
     rows = []
     for line in lines[header_index + 1:]:
-        parts = [p for p in line.strip().split('\t') if p != '']
+        if delim == '\t':
+            parts = [p for p in line.strip().split('\t') if p != '']
+        else:
+            parts = [p.strip().strip('"') for p in line.strip().split(delim)]
+            if parts == ['']:
+                parts = []
         if len(parts) < 1:
             continue
         try:
-            row = [float(x.replace(',', '.')) for x in parts]
+            if delim == ',':
+                row = [float(x) if x != '' else np.nan for x in parts]
+            else:
+                row = [float(x.replace(',', '.')) if x != '' else np.nan for x in parts]
             rows.append(row)
         except Exception:
             if line.strip().lower().startswith('mode'):
@@ -714,15 +777,17 @@ class ExportNameDialog(tk.Toplevel):
     def __init__(self, parent, mpt_names, mode='export', folder=None,
                  progress=None, report=None):
         """mode='export' -> name an exported CSV (result = base name).
-        mode='rename'   -> name a .mpt file.
+        mode='rename'   -> name a data file (.mpt / .csv / .txt).
         mode='batch'    -> name + approve one file of a batch analysis; the
                            analysis report is shown alongside the fields.
         `action` tells the caller whether to proceed, skip, or stop the run."""
         super().__init__(parent)
         self.mode = mode
         self.action = 'cancel'   # 'ok' | 'skip' | 'cancel'
+        # Extension kept on rename: .mpt, or .csv / .txt from MPR Converter
+        self.src_ext = (os.path.splitext(mpt_names[0])[1] if mpt_names else '') or '.mpt'
         if mode == 'rename':
-            title = "Rename MPT file"
+            title = "Rename data file"
         elif mode == 'batch':
             title = "Batch analysis - review and save"
         else:
@@ -916,11 +981,11 @@ class ExportNameDialog(tk.Toplevel):
         return os.path.join(self.folder, self._build_name() + '.csv')
 
     def new_mpt_path(self):
-        return os.path.join(self.folder, self._build_name() + '.mpt')
+        return os.path.join(self.folder, self._build_name() + self.src_ext)
 
     def _update_preview(self):
         if self.mode == 'rename':
-            self.preview.config(text="Will be renamed to:  " + self._build_name() + ".mpt")
+            self.preview.config(text="Will be renamed to:  " + self._build_name() + self.src_ext)
         else:
             self.preview.config(text="Will be saved as:  " + self._build_name() + ".csv")
 
@@ -2679,11 +2744,13 @@ TUT_STEPS = {
         'en': ("Open a folder",
                "Click 'Open Folder' (top left) and choose the tutorial folder. "
                "The dialog already opens there - just confirm.\n\n"
-               "Every .mpt file in the folder and its subfolders is listed in the tree."),
+               "Every .mpt file in the folder and its subfolders is listed in the tree, "
+               "along with CSV / TXT files exported by MPR Converter."),
         'he': ("פתיחת תיקייה",
                "לחץ על 'Open Folder' (למעלה משמאל) ובחר את תיקיית ההדרכה. "
                "החלון כבר נפתח בה - רק אשר.\n\n"
-               "כל קובצי ה-mpt בתיקייה ובתתי-התיקיות יופיעו בעץ."),
+               "כל קובצי ה-mpt בתיקייה ובתתי-התיקיות יופיעו בעץ, "
+               "וגם קובצי CSV ו-TXT שיוצאו מ-MPR Converter."),
     },
     'tree': {
         'en': ("Select cycles",
@@ -4427,9 +4494,9 @@ class CVApp:
             for d in sorted(dirs):
                 self._insert_dir_node(parent_id, os.path.join(current_root, d))
             for fn in sorted(files):
-                if not fn.lower().endswith('.mpt'):
-                    continue
                 fpath = os.path.join(current_root, fn)
+                if not is_cv_data_file(fpath):
+                    continue
 
                 # Lazy: only list the file name here. The file itself is
                 # parsed on demand (first expand or first check) by
@@ -4441,7 +4508,7 @@ class CVApp:
                 self.tree.insert(file_id, 'end', text='(loading…)', values=('', 'placeholder', '', fpath))
 
     def add_file(self):
-        paths = filedialog.askopenfilenames(filetypes=[("MPT files","*.mpt")])
+        paths = filedialog.askopenfilenames(filetypes=DATA_FILETYPES)
         if not paths:
             return
         manual_root = self.dir_nodes.get('__MANUAL__')
@@ -5914,7 +5981,8 @@ class CVApp:
         rebuilds every path, node and cache entry from scratch.
         Returns (ok, message)."""
         folder = os.path.dirname(old_path)
-        new_name = new_base + '.mpt'
+        # Keep the file's own extension (.mpt, or .csv / .txt from MPR Converter).
+        new_name = new_base + (os.path.splitext(old_path)[1] or '.mpt')
         new_path = os.path.join(folder, new_name)
 
         if os.path.normcase(new_path) == os.path.normcase(old_path):
