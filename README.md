@@ -39,7 +39,7 @@ CV Analyzer turns that into a repeatable workflow, the first stage of a pipeline
 - **Appendix page builder**: arranges graphs on a printable page and saves it as PNG or PDF.
 - **Guided tutorial (English / Hebrew)**: runs on first launch on synthetic sample files, and every step waits until the user has actually done it.
 
-![Overlay window comparing the same cycle across three files](docs/screenshot_overlay.png)
+![Overlay window comparing cycles 10 and 300 across three anions (synthetic data)](docs/screenshot_overlay.png)
 
 ### Quick start
 
