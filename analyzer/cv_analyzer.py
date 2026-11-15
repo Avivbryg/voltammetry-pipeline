@@ -4659,6 +4659,14 @@ class CVApp:
     # =================== Folder / File loading ===================
     def open_folder(self, path_override=None):
         initial = DEFAULT_FOLDER if os.path.isdir(DEFAULT_FOLDER) else None
+        if initial is None:
+            # No data folder chosen yet: start at the repository's sample data
+            # (demo_large/ once make_demo_dataset.py has been run).
+            here = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'sample_data')
+            for cand in (os.path.join(here, 'demo_large'), here):
+                if os.path.isdir(cand):
+                    initial = cand
+                    break
         if self.tutorial_folder and os.path.isdir(self.tutorial_folder):
             initial = self.tutorial_folder
         if path_override is None:
