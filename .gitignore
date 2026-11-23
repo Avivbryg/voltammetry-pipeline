@@ -6,3 +6,5 @@ venv/
 .DS_Store
 Thumbs.db
 sample_data/demo_large/
+explorer/cv_explorer_favorites.json
+explorer/cv_explorer_config.json
