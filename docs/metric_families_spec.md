@@ -160,8 +160,10 @@ carry the setting, e.g. `onset_p10_raw`, `onset_k5_raw`, `onset_abs0p5mA_raw`.
   are not needed.
 
 **Capacitive / double layer**
-- Current at a set potential in a non-faradaic window (forward and backward),
-  and half their difference.
+- Mean current in the non-faradaic window (default 1.00–1.10 V vs RHE, the
+  same window for both branches, user-editable), forward and backward, and
+  half their difference. The forward and backward values are the baselines
+  that peak integration subtracts.
 - If a file contains several scan rates: Cdl from the slope of that
   half-difference against scan rate, as an ECSA proxy.
 
@@ -226,9 +228,6 @@ Each step is a separate branch and pull request.
 - Normalization: not needed now. All electrodes carry the same amount of
   active material and the comparison is relative.
 - Peak-integration baseline: the capacitive current.
-
-## Open questions
-
-- Non-faradaic window for the capacitive current in the α-Ni(OH)₂ data
-  (default proposal: 1.00–1.10 V vs RHE, below the redox peaks), and
-  whether one window serves both the forward and the backward branch.
+- Capacitive window: 1.00–1.10 V vs RHE (below the redox peaks) by default,
+  one window for both the forward and the backward branch, editable in the
+  Metrics panel.
