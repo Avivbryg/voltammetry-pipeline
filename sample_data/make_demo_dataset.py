@@ -8,6 +8,13 @@ tried at the scale it was built for: hundreds of cycles per file.
 Every number here is invented. The curves imitate a Ni(OH)2-like redox couple
 vs RHE at 10 mV/s with an OER tail, and nothing is taken from real measurements.
 
+Two slow changes are built in, so the CV Explorer has something to show:
+- the cathodic peak drifts to higher potential over the run (the kind of shift
+  that can serve as a proxy for an alpha -> beta phase change), and
+- the current near the top of the scan (e.g. at 1.6 V) falls after activation.
+How large each change is differs between the three anions. The sizes are
+chosen for the demo and say nothing about real anions.
+
 Usage:
     python sample_data/make_demo_dataset.py                  # 3 files x 300 cycles
     python sample_data/make_demo_dataset.py --cycles 100 --out my_folder
@@ -24,16 +31,18 @@ import os
 import numpy as np
 
 # name, anodic peak (V), cathodic peak (V), final peak height (mA),
-# activation time constant (cycles), anodic peak drift over the run (V)
+# activation time constant (cycles), anodic peak drift over the run (V),
+# cathodic peak shift (V), loss of high-potential activity (fraction),
+# time constant of both slow changes (cycles)
 ANIONS = [
-    ("Nitrate",   1.420, 1.330, 1.30, 60.0,  0.012),
-    ("Carbonate", 1.438, 1.345, 1.05, 90.0,  0.018),
-    ("Chloride",  1.410, 1.322, 1.50, 40.0,  0.008),
+    ("Nitrate",   1.420, 1.330, 1.30, 60.0,  0.012, 0.022, 0.25, 160.0),
+    ("Carbonate", 1.438, 1.335, 1.05, 90.0,  0.018, 0.040, 0.40, 120.0),
+    ("Chloride",  1.410, 1.322, 1.50, 40.0,  0.008, 0.006, 0.08, 220.0),
 ]
 
 STEP = 0.002    # V per point
 RATE = 0.010    # V/s
-E_LOW, E_HIGH = 1.00, 1.60
+E_LOW, E_HIGH = 1.00, 1.62   # top just above 1.6 V, so the current at 1.6 V is defined in every cycle
 C_DL = 1.5      # double-layer capacitance (mF): capacitive current = C * scan rate
 
 HEADER = "mode,time/s,control/V,Ewe/V,<I>/mA,cycle number"
@@ -48,7 +57,7 @@ def peak(E, center, width, skew):
 
 
 def one_file(path, anion, n_cycles, rng):
-    name, Ea0, Ec0, height, tau, drift = anion
+    name, Ea0, Ec0, height, tau, drift, c_shift, loss, tau_slow = anion
     up = np.arange(E_LOW, E_HIGH + 1e-9, STEP)
     down = up[-2::-1]
     E = np.concatenate([up, down])
@@ -62,13 +71,15 @@ def one_file(path, anion, n_cycles, rng):
     for cyc in range(1, n_cycles + 1):
         act = 1.0 - 0.75 * np.exp(-(cyc - 1) / tau)       # activation: grows, then levels off
         Ea = Ea0 + drift * (1.0 - np.exp(-(cyc - 1) / (2 * tau)))
-        Ec = Ec0 + 0.4 * drift * (1.0 - np.exp(-(cyc - 1) / (2 * tau)))
+        slow = 1.0 - np.exp(-(cyc - 1) / tau_slow)          # 0 -> 1 over the run
+        Ec = Ec0 + c_shift * slow                           # cathodic peak moves up
+        decay = 1.0 - loss * slow                           # high-potential activity falls
         h = height * act * (1.0 + rng.normal(0, 0.01))     # small cycle-to-cycle scatter
 
         I = np.where(forward,
                      i_cap + h * peak(E, Ea, 0.024, +0.6),
                      -i_cap - 0.78 * h * peak(E, Ec, 0.022, -0.6))
-        I += 0.008 * (1.0 + 0.3 * act) * np.exp((E - 1.50) / 0.028)   # OER tail
+        I += 0.008 * (1.0 + 0.3 * act) * decay * np.exp((E - 1.50) / 0.028)   # OER tail
         I += 0.004 * np.sin(np.pi * (E - E_LOW) / (E_HIGH - E_LOW))   # sloping baseline
         I += rng.normal(0, 0.004, n)                                   # noise
 
