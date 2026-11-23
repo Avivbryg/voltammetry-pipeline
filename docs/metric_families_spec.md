@@ -15,9 +15,12 @@ the chosen columns, plus a record of the settings that produced them.
 
 ## Ground rules
 
-1. **No silent change to existing results.** Every column that exists today
-   keeps its name, its meaning and its value. New definitions get new
-   columns; old ones are never redefined.
+1. **Keep the onset types, not the fixed values.** The existing onset
+   *types* (percentile, curvature k·σ) stay, but their values (which
+   percentiles, which k) become settings the user chooses in the program,
+   like every new onset type. The 16 fixed definitions are no longer a
+   requirement. Other existing columns (peaks, fixed potentials, junction,
+   charge) keep their names and meaning.
 2. **The export columns are the contract with CV Explorer.** A column name
    says what was measured, in a fixed pattern (below), so the Explorer can
    group columns without a hard-coded list.
@@ -79,7 +82,8 @@ declare a `legacy_names` map, used for the existing variants only.
 
 - Presets are saved in the existing settings file (`~/.cv_overlay_settings.json`,
   new key `metric_presets`). Two built-in presets:
-  - **Thesis (current set)**: exactly today's columns and settings.
+  - **Default**: today's families with today's values as defaults (used for
+    the step 1 comparison), which the user can then change freely.
   - **Quick**: peaks, charge and a few fixed potentials.
 - Every export writes a sidecar file next to the CSV
   (`<name>.settings.json`) with the families, variants, parameters, windows,
@@ -112,10 +116,18 @@ descriptions, so it stays in sync.
 | Charge | net charge over the cycle | `Q_end_raw`, `Q_end_corr` |
 
 The fixed-potential list becomes a user setting (default = today's list).
+For the onset types, the percentiles and the k values become user settings
+too (a list typed in the Metrics panel); today's values are only the
+defaults.
 
 ### New
 
 **Onset (more definitions)**
+
+Every onset type is a variant with its own user settings (thresholds, n·σ,
+windows), and the user can add several values of the same type. Column names
+carry the setting, e.g. `onset_p10_raw`, `onset_k5_raw`, `onset_abs0p5mA_raw`.
+
 - *Absolute threshold*: first E on the forward scan where I exceeds a set
   current (e.g. 0.1, 0.5, 1 mA). Simple and comparable between samples.
 - *Threshold above baseline*: fit a line to a pre-peak window, onset = first
@@ -136,13 +148,16 @@ The fixed-potential list becomes a user setting (default = today's list).
   means the real peak is probably outside the window.
 
 **Peak integration**
-- Anodic charge Qa and cathodic charge Qc over each peak's window, with a
-  choice of baseline: none, linear (between the window ends), or capacitive
-  (the double-layer current measured in a non-faradaic window).
+- Anodic charge Qa and cathodic charge Qc over each peak's window, after
+  subtracting the **capacitive baseline** (the double-layer current measured
+  in a non-faradaic window by the capacitive family; forward branch for Qa,
+  backward branch for Qc). This is the default and the main method. "None"
+  and "linear between the window ends" can remain as options for checking.
 - `QcQa` = |Qc| / Qa: reversibility of the redox couple / how much of the
   oxidized charge comes back.
-- Optional, if the user gives the Ni loading (mol or mg): electrons per Ni
-  and the average oxidation-state change.
+- Not planned: electrons per Ni. All electrodes carry the same amount of
+  active material and the comparison is relative, so absolute values per Ni
+  are not needed.
 
 **Capacitive / double layer**
 - Current at a set potential in a non-faradaic window (forward and backward),
@@ -159,10 +174,12 @@ The fixed-potential list becomes a user setting (default = today's list).
 - *Current at the top of the scan* (max E), so a scan that stops at 1.6 V
   still gives a value.
 
-**Normalization (applies to other families)**
-- Optional per-file area (cm²) or mass (mg); when set, families that output
-  currents or charges also output a normalized column (`_per_cm2`, `_per_mg`).
-- Normalization by the redox-peak charge (activity per active Ni).
+**Normalization (low priority)**
+- All electrodes have the same amount of active material, so per-area or
+  per-mass columns are not needed now. Left out of the plan; the family
+  structure allows adding it later.
+- Possibly useful later: normalization by the redox-peak charge (activity
+  per electrochemically active Ni).
 
 **Quality**
 - Detected scan rate, E range actually reached, number of points.
@@ -188,22 +205,30 @@ Each step is a separate branch and pull request.
    and on two real files, the exported CSV is identical to the one from
    `main` before the change (same columns, same order, values equal within
    1e-12). Keep that comparison as a script, `tests/compare_exports.py`.
-2. **Metrics panel + presets + settings sidecar.** Acceptance: the "Thesis"
+   This check is only to prove the refactor changed nothing; after it,
+   the onset values are free to change.
+2. **Metrics panel + presets + settings sidecar.** Acceptance: the "Default"
    preset reproduces step 1's output; turning a family off removes exactly
    its columns.
-3. **New families, one per pull request,** in this order: onset (new
-   definitions), peak integration, peaks (E½, FWHM, edge flag),
-   OER/UOR activity, quality, capacitive, normalization. Each comes with a
+3. **New families, one per pull request,** in this order: onset (user
+   settings for the existing types, then the new definitions), capacitive
+   (needed first, as the baseline for integration), peak integration,
+   peaks (E½, FWHM, edge flag), OER/UOR activity, quality. Each comes with a
    short entry in the parameter guide and a check on the demo data.
 4. **Explorer reads the families.** Build the parameter tree from the column
    names (family prefix → variant) and show the sidecar settings for a
    loaded file. `PARAM_TREE` stays only as a fallback for old exports.
 
+## Decisions (Aviv, 2026-11-23)
+
+- Onset: keep the types; the user sets the values in the program. The 16
+  fixed definitions do not need to be kept as such.
+- Normalization: not needed now. All electrodes carry the same amount of
+  active material and the comparison is relative.
+- Peak-integration baseline: the capacitive current.
+
 ## Open questions
 
-- Which onset definitions to show by default (all 16 existing ones, or a
-  shorter default list with the rest available)?
-- Ni loading and electrode area: is there a reliable value per sample, and
-  where should it come from (file name, a table, typed in)?
-- Baseline for peak integration in the α-Ni(OH)₂ data: linear between the
-  window ends, or the capacitive current?
+- Non-faradaic window for the capacitive current in the α-Ni(OH)₂ data
+  (default proposal: 1.00–1.10 V vs RHE, below the redox peaks), and
+  whether one window serves both the forward and the backward branch.
