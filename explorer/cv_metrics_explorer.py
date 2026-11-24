@@ -811,8 +811,12 @@ class CVExplorer(tk.Tk):
         return bool(v.get()) if v is not None else False
 
     def _disable_offset(self, ax):
-        # Prevent "+1.468" offset text
+        # Prevent "+1.468" offset text. Only on numeric axes: an axis with
+        # text tick labels (parameter names in the correlation tabs) keeps
+        # its own formatter, otherwise the names turn into 0, 1, 2, ...
         for axis in (ax.xaxis, ax.yaxis):
+            if not isinstance(axis.get_major_formatter(), ScalarFormatter):
+                continue
             fmt = ScalarFormatter(useOffset=False)
             fmt.set_scientific(False)
             axis.set_major_formatter(fmt)
@@ -2188,7 +2192,8 @@ class CVExplorer(tk.Tk):
             return
 
         self._tcorr_last_series = s
-        self._tcorr_last_title = f"Target correlations ({method}) | {mode} | target={target}"
+        mode_short = "all cycles" if "all cycles" in mode.lower() else "per experiment"
+        self._tcorr_last_title = f"Correlation with {target} ({method}, {mode_short})"
         self._tcorr_render_last()
 
     def _tcorr_render_last(self):
@@ -2230,7 +2235,8 @@ class CVExplorer(tk.Tk):
         self.tcorr_ax.set_yticklabels(list(s_plot.index), fontsize=8)
         self.tcorr_ax.invert_yaxis()
 
-        self._auto["tcorr"]["title"] = self._tcorr_last_title + f" | min|r|={minabs:.2f} | topN={topn}"
+        self._auto["tcorr"]["title"] = self._tcorr_last_title + (f", |r| ≥ {minabs:.2f}" if minabs > 0 else "")
+        self.tcorr_ax.axvline(0, color="0.4", linewidth=0.8)
         self._auto["tcorr"]["xlabel"] = "Correlation r"
         self._auto["tcorr"]["ylabel"] = ""
 
