@@ -11,7 +11,8 @@ vs RHE at 10 mV/s with an OER tail, and nothing is taken from real measurements.
 Two slow changes are built in, so the CV Explorer has something to show:
 - the cathodic peak drifts to higher potential over the run (the kind of shift
   that can serve as a proxy for an alpha -> beta phase change), and
-- the current near the top of the scan (e.g. at 1.6 V) falls after activation.
+- the OER current falls after activation; it shows already at 1.45 V on the
+  backward scan (above the redox peaks), and more strongly at 1.6 V.
 How large each change is differs between the three anions. The sizes are
 chosen for the demo and say nothing about real anions.
 
@@ -79,7 +80,7 @@ def one_file(path, anion, n_cycles, rng):
         I = np.where(forward,
                      i_cap + h * peak(E, Ea, 0.024, +0.6),
                      -i_cap - 0.78 * h * peak(E, Ec, 0.022, -0.6))
-        I += 0.008 * (1.0 + 0.3 * act) * decay * np.exp((E - 1.50) / 0.028)   # OER tail
+        I += 0.08 * (1.0 + 0.3 * act) * decay * np.exp((E - 1.45) / 0.05)   # OER tail
         I += 0.004 * np.sin(np.pi * (E - E_LOW) / (E_HIGH - E_LOW))   # sloping baseline
         I += rng.normal(0, 0.004, n)                                   # noise
 
